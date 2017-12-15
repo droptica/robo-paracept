@@ -79,6 +79,16 @@ abstract class TestsSplitter extends BaseTask
  */
 class SplitTestsByGroupsTask extends TestsSplitter implements TaskInterface
 {
+    public function findTestBySignature($tests, $testSignature)
+    {
+        foreach ($tests as $test) {
+            $signature = Descriptor::getTestSignature($test);
+            if ($signature === $testSignature) {
+                return $test;
+            }
+        }
+    }
+
     public function run()
     {
         if (!class_exists('\Codeception\Test\Loader')) {
