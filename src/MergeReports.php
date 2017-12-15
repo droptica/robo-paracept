@@ -198,7 +198,31 @@ class MergeHTMLReportsTask extends BaseTask implements TaskInterface, MergeRepor
             libxml_use_internal_errors($this->previousLibXmlUseErrors);
             throw new TaskException($this, "No destination file is set. Use `->into()` method to set result HTML");
         }
+        // For now we will just add links to separate html reports for each of test groups.
+        $this->printTaskInfo("Adding links to html reports for each of test groups into {$this->dst}");
 
+        $dstHTML = new \DOMDocument();
+        $list = $dstHTML->createElement('ul');
+        for($k=0;$k<count($this->src);$k++){
+            $list_item = $dstHTML->createElement('li');
+            $link = $dstHTML->createElement('a', $this->src[$k]);
+            $link->setAttribute('href', '../../' . $this->src[$k]);
+            $list_item->appendChild($link);
+            $list->appendChild($list_item);
+        }
+        $dstHTML->appendChild($list);
+
+        //save final report
+        file_put_contents($this->dst,$dstHTML->saveHTML());
+        //return to initial statement
+        libxml_use_internal_errors($this->previousLibXmlUseErrors);
+
+        // @todo: As currently not all cases of merging reports are handled properly,
+        // @todo: temporarily we are just displaying links to reports for each of tests group and not merging reports at all.
+        return;
+
+        // @todo: Keep suite names when merging tests from multiple suites.
+        // @todo: Handle cases when there is separate group of dependent tests and contains tests from multiple suites.
         $this->printTaskInfo("Merging HTML reports into {$this->dst}");
 
         //read first source file as main

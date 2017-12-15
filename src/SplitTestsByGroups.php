@@ -6,6 +6,9 @@ use Robo\Exception\TaskException;
 use Robo\Task\BaseTask;
 use Symfony\Component\Finder\Finder;
 use Symfony\Component\Finder\SplFileInfo;
+use \Codeception\Util\Annotation;
+use \Codeception\Test\Loader;
+use \Codeception\Test\Descriptor;
 
 trait SplitTestsByGroups
 {
@@ -81,24 +84,70 @@ class SplitTestsByGroupsTask extends TestsSplitter implements TaskInterface
         if (!class_exists('\Codeception\Test\Loader')) {
             throw new TaskException($this, 'This task requires Codeception to be loaded. Please require autoload.php of Codeception');
         }
-        $testLoader = new \Codeception\Test\Loader(['path' => $this->testsFrom]);
+        $testLoader = new Loader(['path' => $this->testsFrom]);
         $testLoader->loadTests($this->testsFrom);
         $tests = $testLoader->getTests();
+        $dependent_tests_group = array();
+        // Add all tests which are dependent on other ones or are dependencies for other ones
+        // (generally tests related by @depends annotation) into separate group
+        // to be possible to run them together in one docker container.
+        foreach ($tests as $idx => $test) {
+            $test_name = Descriptor::getTestFullName($test);
+            if ($test instanceof \Codeception\Test\Cest) {
+                $test->getMetadata()
+                    ->setParamsFromAnnotations(Annotation::forMethod($test->getTestClass(), $test->getTestMethod())
+                        ->raw());
+                $test_dependencies = $test->getDependencies();
+                if (!empty($test_dependencies)) {
+                    // Add test which is dependent on other ones (have @depends annotation).
+                    if (!in_array($test_name, $dependent_tests_group)) {
+                        $dependent_tests_group[] = $test_name;
+                    }
+                    // Add tests that are dependencies for this test (pointed by @depends annotation).
+                    foreach ($test_dependencies as $test_dependency) {
+                        $test_depends = $this->findTestBySignature($tests, $test_dependency);
+                        $test_depends_name = Descriptor::getTestFullName($test_depends);
+                        if (!in_array($test_depends_name, $dependent_tests_group)) {
+                            $dependent_tests_group[] = $test_depends_name;
+                        }
+                    }
+                }
+            }
+        }
+        // In case we have dependent tests, we will have one extra group,
+        // so we need to decrease number of other groups to get requested
+        // number of groups in total.
+        if (!empty($dependent_tests_group)) {
+            $this->numGroups = $this->numGroups - 1;
+        }
 
         $i = 0;
         $groups = [];
 
         $this->printTaskInfo('Processing ' . count($tests) . ' tests');
-        // splitting tests by groups
+
+        // Splitting tests by groups.
+        /** @var \Codeception\TestInterface $test */
         foreach ($tests as $test) {
             if ($test instanceof PHPUnit_Framework_TestSuite_DataProvider) {
                 $test = current($test->tests());
             }
-            $groups[($i % $this->numGroups) + 1][] = \Codeception\Test\Descriptor::getTestFullName($test);
-            $i++;
+            $test_name = Descriptor::getTestFullName($test);
+            $test_in_dependent_group = !empty($dependent_tests_group) && in_array($test_name, $dependent_tests_group);
+            if (!$test_in_dependent_group) {
+                $test_group_idx = ($i % $this->numGroups) + 1;
+                $groups[$test_group_idx][] = $test_name;
+                $i++;
+            }
         }
 
-        // saving group files
+        // Add dependent tests group at the end.
+        if (!empty($dependent_tests_group)) {
+            $test_group_idx = ($i % $this->numGroups) + 1;
+            $groups[$test_group_idx] = $dependent_tests_group;
+        }
+
+        // Saving group files.
         foreach ($groups as $i => $tests) {
             $filename = $this->saveTo . $i;
             $this->printTaskInfo("Writing $filename");
