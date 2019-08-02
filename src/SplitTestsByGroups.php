@@ -220,7 +220,7 @@ class SplitTestFilesByGroupsTask extends TestsSplitter implements TaskInterface 
       $groups = [];
       $test_files_number = count($files);
       $test_files_max_per_group = ($test_files_number > $this->numGroups ? (int) ($test_files_number / $this->numGroups) : 1);
-      if (($test_files_number % $this->numGroups) > 0) {
+      if ($test_files_number > $this->numGroups && ($test_files_number % $this->numGroups) > 0) {
         $test_files_max_per_group++;
       }
 
