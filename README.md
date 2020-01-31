@@ -8,6 +8,8 @@ robo-paracept
 
 Robo tasks for Codeception tests parallel execution. Requires [Robo Task Runner](http://robo.li)
 
+Authored by  [Droptica](https://www.droptica.com)
+
 ## Install via Composer
 
 ```
